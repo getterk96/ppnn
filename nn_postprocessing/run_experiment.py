@@ -138,7 +138,7 @@ if __name__ == '__main__':
 
     # Config file
     p.add(
-        '-c', '--config',
+        '-c', '--config.py',
         is_config_file=True,
         help='Config file path.'
     )

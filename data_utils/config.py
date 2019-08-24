@@ -1,0 +1,10 @@
+resolution = 0.5
+max_north = 55.0
+min_north = 0.5
+max_east = 140.0
+min_east = 70.5
+latitude = [min_north + lat * resolution for lat in range(int((max_north - min_north) / resolution) + 1)]
+longitude = [min_east + lon * resolution for lon in range(int((max_east - min_east) / resolution) + 1)]
+storage_dir = "/data/gaojinghan/EC_ensemble/manipulated/"
+observation_raw_dir = "/data/gaojinghan/EC_ensemble/TMP/2M_ABOVE_GROUND/"
+forecast_raw_dir = "/data/gaojinghan/EC_ensemble/"

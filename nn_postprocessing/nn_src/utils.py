@@ -7,6 +7,7 @@ Author: Stephan Rasp
 """
 import os
 import platform
+import time
 import copy
 from scipy.stats import norm
 import numpy as np
@@ -30,31 +31,31 @@ date_format = '%Y-%m-%d'
 
 
 # Define aux variable dictionary
-aux_dict = OrderedDict()
-aux_dict['data_aux_geo_interpolated.nc'] = ['orog', 
-                                            'station_alt', 
-                                            'station_lat', 
-                                            'station_lon']
-aux_dict['data_aux_pl500_interpolated_00UTC.nc'] = ['u_pl500_fc',
-                                                    'v_pl500_fc',
-                                                    'gh_pl500_fc']
-aux_dict['data_aux_pl850_interpolated_00UTC.nc'] = ['u_pl850_fc',
-                                                    'v_pl850_fc',
-                                                    'q_pl850_fc']
-aux_dict['data_aux_surface_interpolated_00UTC.nc'] = ['cape_fc',
-                                                      'sp_fc',
-                                                      'tcc_fc']
-aux_dict['data_aux_surface_more_interpolated_part1_00UTC.nc']  = [
-    'sshf_fc', 'slhf_fc', 'u10_fc','v10_fc'
-]
-aux_dict['data_aux_surface_more_interpolated_part2_00UTC.nc']  = [
-    'ssr_fc', 'str_fc', 'd2m_fc','sm_fc'
-]
+# aux_dict = OrderedDict()
+# aux_dict['data_aux_geo_interpolated.nc'] = ['orog',
+#                                             'station_alt',
+#                                             'station_lat',
+#                                             'station_lon']
+# aux_dict['data_aux_pl500_interpolated_00UTC.nc'] = ['u_pl500_fc',
+#                                                     'v_pl500_fc',
+#                                                     'gh_pl500_fc']
+# aux_dict['data_aux_pl850_interpolated_00UTC.nc'] = ['u_pl850_fc',
+#                                                     'v_pl850_fc',
+#                                                     'q_pl850_fc']
+# aux_dict['data_aux_surface_interpolated_00UTC.nc'] = ['cape_fc',
+#                                                       'sp_fc',
+#                                                       'tcc_fc']
+# aux_dict['data_aux_surface_more_interpolated_part1_00UTC.nc']  = [
+#     'sshf_fc', 'slhf_fc', 'u10_fc','v10_fc'
+# ]
+# aux_dict['data_aux_surface_more_interpolated_part2_00UTC.nc']  = [
+#     'ssr_fc', 'str_fc', 'd2m_fc','sm_fc'
+# ]
 
 
 # Data loading functions
 def get_train_test_sets(data_dir=None, train_dates=None, test_dates=None,
-                        predict_date=None, fclt=48, window_size=None,
+                        predict_date=None, fclt=120, window_size=None,
                         preloaded_data=None, aux_dict=None,
                         verbose=1, seq_len=None, fill_value=None,
                         valid_size=None, full_ensemble_t=False,
@@ -154,22 +155,28 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
     
     fl = []   # Here we will store all the features
     # Load Temperature data
-    rg = Dataset(data_dir + 'data_interpolated_00UTC.nc')
-    target = rg.variables['t2m_obs'][:]
-    ntime = target.shape[0]
-    dates = num2date(rg.variables['time'][:],
-                     units=rg.variables['time'].units)
-    station_id = rg.variables['station_id'][:]
+    obs_rg = Dataset(os.path.join(data_dir, 'observation/data.nc'))
+    fc_rg = Dataset(os.path.join(data_dir + 'forecast/data.nc'))
+    fc_dates = set(fc_rg.variables['time'])
+    obs_dates = set(obs_rg.variables['time'])
+    target = obs_rg.variables['data'][:]
+    fc_data = fc_rg.variables['data'][:].transpose(3,0,1,2)
+    target = target.reshape(target.shape[0], target.shape[1] * target.shape[2])
+    fc_data = fc_data.reshape(fc_data.shape[0], fc_data.shape[1], fc_data.shape[2] * fc_data.shape[3])
+    dates = np.array([datetime.fromtimestamp(t) for t in sorted(list(fc_dates & obs_dates))])
+    ntime = dates.__len__()
+    station_id = range(obs_rg.variables['latitude'] * obs_rg.variables['longitude'])
     if full_ensemble_t:
         feature_names = []
-        for i in range(rg.variables['t2m_fc'].shape[1]):
-            fl.append(rg.variables['t2m_fc'][:, i, :])
+        for i in range(fc_data.shape[0]):
+            fl.append(fc_data[i, :, :])
             feature_names.append('t2m_fc_ens%i' % (i+1))
     else:
-        fl.append(np.mean(rg.variables['t2m_fc'][:], axis=1))
-        fl.append(np.std(rg.variables['t2m_fc'][:], axis=1, ddof=1))
+        fl.append(np.mean(fc_data, axis=0))
+        fl.append(np.std(fc_data, axis=0, ddof=1))
         feature_names = ['t2m_fc_mean', 't2m_fc_std']
-    rg.close()
+    obs_rg.close()
+    fc_rg.close()
     
     if aux_dict is not None:
         for aux_fn, var_list in aux_dict.items():
@@ -186,7 +193,7 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
                     feature_names.extend([var + '_mean', var + '_std'])
             rg.close()
     
-    return (target.data, np.array(fl, dtype='float32'), dates, station_id, 
+    return (target.data, np.array(fl, dtype='float32'), dates, station_id,
             feature_names)
 
 
@@ -608,12 +615,12 @@ def create_results_df(dates, station_ids, means, stds, train_time=None,
     return df
 
 
-def save_pickle(data_dir, fn, train_dates=['2015-01-01', '2016-01-01'],
-                add_current_error=False, current_error_len=1,
-                test_dates=['2016-01-01', '2017-01-01']):
+def save_pickle(data_dir, fn, # train_dates=['2015-01-01', '2016-01-01'],
+                add_current_error=False, current_error_len=1):
+                # test_dates=['2016-01-01', '2017-01-01']):
     """Load and pickle dataset"""
     sets = get_train_test_sets(
-        data_dir, train_dates, test_dates, aux_dict=aux_dict,
+        data_dir, # train_dates, test_dates, aux_dict=aux_dict,
         add_current_error=add_current_error, current_error_len=current_error_len
     )
     with open(data_dir + fn, 'wb') as f:
@@ -645,16 +652,16 @@ def plot_fc(data_set, idx, distr='pdf', preds=None):
     plt.show()
 
 
-def get_datasets(data_dir, pickled_name, train_dates, test_dates=['2016-01-01', '2017-01-01'], 
+def get_datasets(data_dir, pickled_name, #, train_dates, test_dates=['2016-01-01', '2017-01-01'],
                  aux=False, reload=False):
     pickle_fn = f'{data_dir}pickled/{pickled_name}'
     if not os.path.exists(pickle_fn) or reload:
-        var_dict = aux_dict if aux else None
+        # var_dict = aux_dict if aux else None
         train_set, test_set = get_train_test_sets(
             data_dir,
-            train_dates,
-            test_dates,
-            aux_dict=var_dict,
+            # train_dates,
+            # test_dates,
+            # aux_dict=var_dict,
         )
         # Save pickled dataset
         with open(pickle_fn, 'wb') as f:
