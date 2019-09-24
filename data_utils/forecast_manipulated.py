@@ -3,6 +3,7 @@ import json
 import time, datetime
 import numpy as np
 from netCDF4 import Dataset
+import random
 
 import config as config
 
@@ -18,25 +19,23 @@ def create_forecast_data_glob():
 
     all_data = []
     all_times = []
-    all_time_paths = []
-    all_dates = list(j)
-    date_files = os.listdir(os.path.join(config.forecast_raw_dir, 'temperature2m'))
+    all_dates = sorted(list(j))
     for date in all_dates:
         for file in [f'MD_ECMF_PD_temperature2m_IT_{date}{t:02}_FH_120_VT_{get_120ha_date(date)}{t:02}.nc' for t in [0, 12]]:
-            if file in date_files:
+            if file in j[date]:
                 data = Dataset(os.path.join(config.forecast_raw_dir, 'temperature2m', file))
                 raw_data = np.array(data.variables['t2m']).squeeze().transpose((2 ,1 ,0))[:141]
                 all_data.append(raw_data)
-                all_time_paths += os.path.join(config.forecast_raw_dir, 'temperature2m', file)
                 all_times.append(time.mktime(time.strptime(file.split('_')[9][:-3], '%Y%m%d%H')))
             if all_times.__len__() % 100 == 0:
                 print(all_times.__len__())
 
-
+    if all_times != sorted(all_times):
+        print("ERROR! Date weirdly not in correct sequence!")
+        return
     if not os.path.exists(root_dir):
         os.mkdir(root_dir)
-    rootgrp = Dataset(os.path.join(root_dir, 'data.nc'), 'w')
-
+    rootgrp = Dataset(os.path.join(root_dir, 'raw_data.nc'), 'w')
     rootgrp.createDimension('time', all_times.__len__())
     rootgrp.createDimension('latitude', config.latitude.__len__())
     rootgrp.createDimension('longitude', config.longitude.__len__())

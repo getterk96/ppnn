@@ -6,28 +6,23 @@ structured at the moment.
 Author: Stephan Rasp
 """
 import os
-import platform
-import time
 import copy
 from scipy.stats import norm
 import numpy as np
 np.random.seed(42)
 from netCDF4 import num2date, Dataset
 from .emos_network_theano import EMOS_Network
-import timeit
 from keras.callbacks import EarlyStopping
 from datetime import datetime
 from tqdm import tqdm
 import pandas as pd
-from collections import OrderedDict
-import pdb
 import pickle
 import matplotlib.pyplot as plt
 
 # Basic setup
 # print('Anaconda environment:', os.environ['CONDA_DEFAULT_ENV'])
 # print(platform.system(), platform.release())
-date_format = '%Y-%m-%d'
+date_format = '%Y-%m-%d-%H'
 
 
 # Define aux variable dictionary
@@ -157,15 +152,14 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
     # Load Temperature data
     obs_rg = Dataset(os.path.join(data_dir, 'observation/data.nc'))
     fc_rg = Dataset(os.path.join(data_dir + 'forecast/data.nc'))
-    fc_dates = set(fc_rg.variables['time'])
-    obs_dates = set(obs_rg.variables['time'])
+    fc_dates = fc_rg.variables['time']
     target = obs_rg.variables['data'][:]
     fc_data = fc_rg.variables['data'][:].transpose(3,0,1,2)
     target = target.reshape(target.shape[0], target.shape[1] * target.shape[2])
     fc_data = fc_data.reshape(fc_data.shape[0], fc_data.shape[1], fc_data.shape[2] * fc_data.shape[3])
-    dates = np.array([datetime.fromtimestamp(t) for t in sorted(list(fc_dates & obs_dates))])
+    dates = np.array([datetime.fromtimestamp(t) for t in fc_dates])
     ntime = dates.__len__()
-    station_id = range(obs_rg.variables['latitude'] * obs_rg.variables['longitude'])
+    station_id = range(len(obs_rg.variables['latitude']) * len(obs_rg.variables['longitude']))
     if full_ensemble_t:
         feature_names = []
         for i in range(fc_data.shape[0]):
@@ -192,7 +186,6 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
                     fl.append(np.std(data, axis=1, ddof=1))
                     feature_names.extend([var + '_mean', var + '_std'])
             rg.close()
-    
     return (target.data, np.array(fl, dtype='float32'), dates, station_id,
             feature_names)
 
@@ -307,7 +300,7 @@ def split_and_scale(raw_data, train_dates_idxs, test_dates_idxs, verbose=1,
                 features_max = np.nanmax(f, axis=(0, 1))
         if full_ensemble_t:
             # Scale all temeperature members with same max
-            n_ens = 50  # ATTENTION: hard-coded
+            n_ens = 51  # ATTENTION: hard-coded
             features_max[:n_ens] = np.max(features_max[:n_ens])
         f /= features_max
 
@@ -361,11 +354,11 @@ def get_date_strs(features, dates, nan_mask, dates_idxs):
 
 
 # Helper functions
-def return_date_idx(dates, date_str=None, y=None, m=None, d=None):
+def return_date_idx(dates, date_str=None, y=None, m=None, d=None, h=None):
     if date_str is not None:
         dt = datetime.strptime(date_str, date_format)
     else:
-        dt = datetime(y, m, d, 0, 0)
+        dt = datetime(y, m, d, h, 0, 0)
     return np.where(dates == dt)[0][0]
 
 
@@ -485,8 +478,8 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
     dates = raw_data[2]
     date_idx_start = return_date_idx(dates, date_str_start)
     date_idx_stop = return_date_idx(dates, date_str_stop)
-    date_str_list = [datetime.strftime(dt, date_format) for dt in 
-                     list(dates[date_idx_start:date_idx_stop])]
+    date_str_list = [datetime.strftime(dt, date_format) for dt in
+                     list(dates[date_idx_start:date_idx_stop + 1])]
 
 
     # Initialize lists to store dates, station_ids, means and stds
@@ -497,7 +490,8 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
 
     # Start loop 
     for i, date_str in enumerate(tqdm(date_str_list)):
-
+        if i < window_size:
+            continue
         # Get data slice
         train_set, test_set = get_train_test_sets(preloaded_data=raw_data, 
                                                   predict_date=date_str,
