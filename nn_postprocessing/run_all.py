@@ -1,5 +1,5 @@
 """
-Script to run all experiments defined by config files.
+Script to run all experiments defined by config.py files.
 """
 from glob import glob
 import os
@@ -12,7 +12,7 @@ if __name__ == '__main__':
         data_dir = '/project/meteo/w2w/C7/ppnn_data/'
     else:
         raise Exception('Working directory not recognized.')
-    config_files = sorted(glob('./config/*.yml'))
+    config_files = sorted(glob('./config.py/*.yml'))
     for c in config_files:
         print('Running experiment:', c)
         os.system('python ./run_experiment.py -c %s --data_dir %s --save_preds'

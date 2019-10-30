@@ -25,12 +25,12 @@ from ecmwfapi import ECMWFDataServer
 server = ECMWFDataServer()
     
 def retrieve_tigge_data():
-    date1 = [str(i) + "-01-01" for i in xrange(2007,2017)] 
-    date2 = [str(i) + "-12-31" for i in xrange(2007,2017)]   
+    date1 = [str(i) + "-01-01" for i in range(2007,2017)]
+    date2 = [str(i) + "-12-31" for i in range(2007,2017)]
     dates = date1
     for j in range(0,10):
         dates[j] = date1[j] + "/to/" + date2[j]
-    data_dir = "/media/sebastian/Elements/Postproc_NN/data/forecasts/auxiliary/" 
+    data_dir = "/home/gaojinghan/ppnn/data/forecasts/auxiliary/"
     for date in dates:
         target = data_dir + "ecmwf_aux_geo_" + date[:4] + ".grib"
         tigge_request(date, target)
@@ -56,6 +56,6 @@ def tigge_request(date, target):
     })
  
 if __name__ == '__main__':
-    mem_numbers = ''.join([''.join([str(i) + "/" for i in xrange(1,50)]),'50']) 
+    mem_numbers = ''.join([''.join([str(i) + "/" for i in range(1,50)]),'50'])
     retrieve_tigge_data()
 

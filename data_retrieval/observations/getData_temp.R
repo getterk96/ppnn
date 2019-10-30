@@ -2,19 +2,15 @@
 
 ## note the terms of use: ftp://ftp-cdc.dwd.de/pub/CDC/Terms_of_use.pdf
 
-library(RCurl)
-library(magrittr)
-library(stringr)
-
 #### paths ####
-myPath <- "/path/to/data/"
+myPath <- "/home/gaojinghan/ppnn/data/observation/"
 
 # download folder
 dlPath <-
-  paste0(myPath, "data_files/download/")
+  paste0(myPath, "download/")
 # data folder
 dataPath <- 
-  paste0(myPath, "data_files/")
+  paste0(myPath, "")
 # download path
 dwdPath <-
   "ftp://ftp-cdc.dwd.de/pub/CDC/observations_germany/climate/hourly/air_temperature/historical/"
