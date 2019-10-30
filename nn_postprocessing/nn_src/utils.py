@@ -166,6 +166,17 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
             fl.append(fc_data[i, :, :])
             feature_names.append('t2m_fc_ens%i' % (i+1))
     else:
+        sum_a = 0
+        sum_b = 0
+        over_max = np.where(fc_data > 50)
+        if over_max != [] and 0 not in over_max[1]:
+            sub = np.array(over_max)
+            sub[1] -= 1
+            fc_data[over_max] = fc_data[sub[0], sub[1], sub[2]]
+        elif over_max != []:
+            sub = over_max
+            sub[1][np.where(over_max[1] == 0)] = 1
+            fc_data[over_max] = fc_data[sub]
         fl.append(np.mean(fc_data, axis=0))
         fl.append(np.std(fc_data, axis=0, ddof=1))
         feature_names = ['t2m_fc_mean', 't2m_fc_std']
@@ -186,6 +197,7 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
                     fl.append(np.std(data, axis=1, ddof=1))
                     feature_names.extend([var + '_mean', var + '_std'])
             rg.close()
+
     return (target.data, np.array(fl, dtype='float32'), dates, station_id,
             feature_names)
 
@@ -555,6 +567,7 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
                                         test_set.targets, verbose=0)
             if verbose == 1:
                 print(train_crps, valid_crps)
+            print(train_crps, valid_crps)
 
             # Get predictions
             p = model.predict([test_mean, test_std])
@@ -574,6 +587,8 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
                                         verbose=0)
             valid_crps = model.evaluate(test_set.features, test_set.targets,
                                         verbose=0)
+
+            print(train_crps, valid_crps)
 
             # Get predictions
             p = model.predict(test_set.features)
