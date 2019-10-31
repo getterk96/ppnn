@@ -5,8 +5,9 @@
 from .losses import crps_cost_function
 
 import keras
-from keras.layers import Input, Dense, merge, Embedding, Flatten, Concatenate
+from keras.layers import Input, Dense, merge, Embedding, Flatten, Concatenate, Activation, Dropout
 from keras.models import Model, Sequential
+from keras.layers import Conv2D, MaxPooling2D
 from keras.optimizers import Adam, SGD
 import keras.backend as K
 from keras.callbacks import EarlyStopping
@@ -59,6 +60,19 @@ def build_fc_model(n_features, n_outputs, compile=False, optimizer='adam',
     if compile:
         opt = keras.optimizers.__dict__[optimizer](lr=lr)
         model.compile(optimizer=opt, loss=loss)
+    return model
+
+
+def build_cnn_model(input_shape, compile=False, optimizer='adam',
+                   lr=0.1, loss=crps_cost_function):
+    model = Sequential()
+    model.add(Conv2D(2, (3, 3), padding='same', input_shape=input_shape))
+    model.add(Activation('linear'))
+
+    # Let's train the model using RMSprop
+    if compile:
+        opt = keras.optimizers.__dict__[optimizer](lr=lr)
+        model.compile(loss=loss, optimizer=opt)
     return model
 
 

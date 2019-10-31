@@ -80,7 +80,7 @@ def get_train_test_sets(data_dir=None, train_dates=None, test_dates=None,
 
     # Load raw data from netcdf files
     if preloaded_data is None:
-        raw_data = load_raw_data(data_dir, aux_dict, full_ensemble_t)
+        raw_data = load_2d_raw_data(data_dir, aux_dict, full_ensemble_t)
     else:
         raw_data = preloaded_data
 
@@ -202,6 +202,64 @@ def load_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
             feature_names)
 
 
+def load_2d_raw_data(data_dir, aux_dict=None, full_ensemble_t=False):
+    """Load raw data from NetCDF files.
+
+    Ensemble mean and standard deviations are appended to feature list.
+    Except for geo variables which do not have an ensemble dimension.
+
+    Params:
+        data_dir: base directory where NetCDF files are stored
+        aux_dict: Dictionary with name of auxiliary file and
+                  list of variables. If None, only temperature.
+        full_ensemble_t: Return all 50 ensemble members for temperature
+    Returns:
+        target: t2m_obs [date, station]
+        feature_list: [feature, date, station]
+        dates: [dates] List of datetime objects
+    """
+    aux_dir = data_dir + 'auxiliary/interpolated_to_stations/'
+
+    fl = []  # Here we will store all the features
+    # Load Temperature data
+    obs_rg = Dataset(os.path.join(data_dir, 'observation/data.nc'))
+    fc_rg = Dataset(os.path.join(data_dir + 'forecast/data.nc'))
+    fc_dates = fc_rg.variables['time']
+    target = obs_rg.variables['data'][:]
+    fc_data = fc_rg.variables['data'][:]
+    dates = np.array([datetime.fromtimestamp(t) for t in fc_dates])
+    ntime = dates.__len__()
+    station_id = [[i * len(obs_rg.variables['latitude']) + j for j in range(len(obs_rg.variables['latitude']))] for i in range(len(obs_rg.variables['longitude']))]
+    # if full_ensemble_t:
+    #     feature_names = []
+    #     for i in range(fc_data.shape[0]):
+    #         fl.append(fc_data[i, :, :])
+    #         feature_names.append('t2m_fc_ens%i' % (i+1))
+    # else:
+    fl.append(np.mean(fc_data, axis=3))
+    fl.append(np.std(fc_data, axis=3, ddof=1))
+    fl = np.array(fl, dtype='float32').transpose(1,2,3,0)
+    feature_names = ['t2m_fc_mean', 't2m_fc_std']
+    obs_rg.close()
+    fc_rg.close()
+
+    if aux_dict is not None:
+        for aux_fn, var_list in aux_dict.items():
+            rg = Dataset(aux_dir + aux_fn)
+            for var in var_list:
+                data = rg.variables[var][:]
+                if 'geo' in aux_fn:
+                    # Should probably look at dimensions
+                    fl.append(np.array([data] * ntime))
+                    feature_names.extend([var])
+                else:
+                    fl.append(np.mean(data, axis=1))
+                    fl.append(np.std(data, axis=1, ddof=1))
+                    feature_names.extend([var + '_mean', var + '_std'])
+            rg.close()
+    return (target.data, fl, dates, station_id,
+            feature_names)
+
 class DataContainer(object):
     """Class for storing data
     """
@@ -249,7 +307,7 @@ def split_and_scale(raw_data, train_dates_idxs, test_dates_idxs, verbose=1,
         if seq_len is None:
             #pdb.set_trace()
             t = targets[dates_idxs[0]:dates_idxs[1]] # [date, station]
-            f = features[:, dates_idxs[0]:dates_idxs[1]] # [feature, date, station]
+            f = features[dates_idxs[0]:dates_idxs[1]] # [feature, date, station]
 
             if add_current_error:
                 didx = int(fclt / 24)
@@ -269,13 +327,14 @@ def split_and_scale(raw_data, train_dates_idxs, test_dates_idxs, verbose=1,
                 f = np.concatenate((f, new_f), axis=0)
 
             # Ravel arrays, combine dates and stations --> instances
-            t = np.reshape(t, (-1)) # [instances]
-            f = np.reshape(f, (f.shape[0], -1)) # [features, instances]
+            t = np.reshape(t, (t.shape[0], t.shape[1], t.shape[2], 1)) # [instances]
+            # f = np.reshape(f, (f.shape[0], -1)) # [features, instances]
 
             # Swap feature axes
-            f = np.rollaxis(f, 1, 0) # [instances, features]
+            # f = np.transpose(f, (1, 2, 3, 0)) # [instances, features]
 
             # Get nan mask from target
+
             nan_mask = np.isfinite(t)
         else:
             assert add_current_error is False, 'Current error not compatible with sequence'
@@ -300,14 +359,14 @@ def split_and_scale(raw_data, train_dates_idxs, test_dates_idxs, verbose=1,
             # Get nan mask from last entry of target
             nan_mask = np.isfinite(t[:, -1, 0])
         
-        # Apply NaN mask
-        f = f[nan_mask]
-        t = t[nan_mask]
-
+        # # Apply NaN mask
+        # f = f[nan_mask]
+        # t = t[nan_mask]
+        print(f[0, 100:110, 100:110, 0], t[0, 100:110, 100:110, 0])
         # Scale features
         if set_name == 'train': # Get maximas
             if seq_len is None:
-                features_max = np.nanmax(f, axis=0)
+                features_max = np.nanmax(f, axis=(0, 1, 2))
             else:
                 features_max = np.nanmax(f, axis=(0, 1))
         if full_ensemble_t:
@@ -339,9 +398,9 @@ def split_and_scale(raw_data, train_dates_idxs, test_dates_idxs, verbose=1,
 
 def get_cont_ids(features, nan_mask, dates_idxs, seq_len=None):
     s = features.shape
-    cont_ids = np.array([np.arange(s[-1])] * s[1])
+    cont_ids = np.array([[[i * s[2] + j for j in range(s[2])] for i in range(s[1])]] * s[0])
     cont_ids = cont_ids[dates_idxs[0]:dates_idxs[1]]
-    cont_ids = np.reshape(cont_ids, (-1))
+    cont_ids = np.reshape(cont_ids, (cont_ids.shape[0], cont_ids.shape[1], cont_ids.shape[2], 1))
     if seq_len is not None:
         cont_ids = np.rollaxis(np.array([cont_ids] * seq_len), 1, 0)
     return cont_ids[nan_mask]
@@ -349,19 +408,19 @@ def get_cont_ids(features, nan_mask, dates_idxs, seq_len=None):
 
 def get_station_ids(features, station_id, nan_mask, dates_idxs):
     s = features.shape
-    station_ids = np.array([list(station_id)] * s[1])
+    station_ids = np.array([list(station_id)] * s[0])
     station_ids = station_ids[dates_idxs[0]:dates_idxs[1]]
-    station_ids = np.reshape(station_ids, (-1))
+    station_ids = np.reshape(station_ids, (station_ids.shape[0], station_ids.shape[1], station_ids.shape[2], 1))
     return station_ids[nan_mask]
 
 
 def get_date_strs(features, dates, nan_mask, dates_idxs):
     s = features.shape
     date_strs = [datetime.strftime(dt, date_format) for dt in list(dates)]
-    date_strs = np.array([list(date_strs)] * s[2])
-    date_strs = np.rollaxis(date_strs, 1, 0)
+    date_strs = np.array([[list(date_strs)] * s[1]] * s[2])
+    date_strs = np.transpose(date_strs, (2,1,0))
+    date_strs = np.reshape(date_strs, (date_strs.shape[0], date_strs.shape[1], date_strs.shape[2], 1))
     date_strs = date_strs[dates_idxs[0]:dates_idxs[1]]
-    date_strs = np.reshape(date_strs, (-1))
     return date_strs[nan_mask]
 
 
@@ -484,7 +543,7 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
     valid_crps_list = []
 
     # Load data initially
-    raw_data = load_raw_data(data_dir)
+    raw_data = load_2d_raw_data(data_dir)
 
     # Get date indices
     dates = raw_data[2]
@@ -607,6 +666,7 @@ def loop_over_days(data_dir, model, date_str_start, date_str_stop,
         valid_crps_list.append(valid_crps)
 
         # Store predictions
+        p = np.reshape(p, (-1, 2))
         p_means, p_stds = p[:, 0], p[:, 1]
         mean_list.extend(list(p_means))
         std_list.extend(list(p_stds))

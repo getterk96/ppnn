@@ -6,7 +6,7 @@ import keras.backend as K
 import numpy as np
 # Import erf depending on whether we use the theano or tensorflow backend
 if keras.backend.backend() == 'tensorflow':
-    from tensorflow import erf
+    from tensorflow import erf, reshape
 else:
     from theano.tensor import erf
 
@@ -26,7 +26,8 @@ def crps_cost_function(y_true, y_pred, theano=False):
         mean_crps: Scalar with mean CRPS over batch
     """
 
-    # Split input
+    reshape(y_pred, (-1, 2))
+    reshape(y_true, (-1, 1))
     mu = y_pred[:, 0]
     sigma = y_pred[:, 1]
     # Ugly workaround for different tensor allocation in keras and theano

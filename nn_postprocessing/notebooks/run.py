@@ -45,6 +45,23 @@ date_str_stop = '2019-07-18-12'
 #  fc_model.evaluate(test_set.features, test_set.targets, batch_size, verbose=0))
 # result = [1.98311387366, 1.98747289806]
 
+# CNN Network
+
+cnn_model = build_cnn_model(train_set.features.shape[1:], compile=True, optimizer='sgd')
+cnn_model.summary()
+
+cnn_model.fit(train_set.features, train_set.targets, epochs=steps_max,
+             batch_size=batch_size,
+             validation_data=[test_set.features, test_set.targets],
+             verbose=0,
+             callbacks=[EarlyStopping(monitor='loss',
+                                      min_delta=early_stopping_delta,
+                                      patience=2)])
+
+print(cnn_model.evaluate(train_set.features, train_set.targets, batch_size, verbose=0),
+ cnn_model.evaluate(test_set.features, test_set.targets, batch_size, verbose=0))
+# result = [1.98311387366, 1.98747289806]
+
 # EMOS Network
 # model_keras = build_EMOS_network_keras(compile=True, optimizer='sgd', lr=0.1)
 # model_keras.summary()
@@ -79,24 +96,25 @@ date_str_stop = '2019-07-18-12'
 # build_and_run_emb_model(5)
 
 # Run for multidays
-max_id = int(np.max([train_set.cont_ids.max(), test_set.cont_ids.max()]))
-emb_model = build_emb_model(2, 2, [], 5, max_id, compile=True)
-
-train_crps_list, valid_crps_list, results_df = loop_over_days(
-    DATA_DIR,
-    emb_model,
-    date_str_start, date_str_stop,
-    window_size=window_size,
-    fclt=fclt,
-    epochs_max=steps_max,
-    early_stopping_delta=early_stopping_delta,
-    lr=0.1,
-    verbose=0,
-    model_type='embedding')
-#%%
-
-print(np.mean(train_crps_list), np.mean(valid_crps_list))
-preds = emb_model.predict([test_set.features, test_set.cont_ids])
-results_df = create_results_df(test_set.date_strs, test_set.station_ids,
-                               preds[:, 0], preds[:, 1])
-results_df.to_csv(results_dir + 'embedding_fc_train_2015_pred_2016.csv')
+# max_id = int(np.max([train_set.cont_ids.max(), test_set.cont_ids.max()]))
+# emb_model = build_emb_model(2, 2, [], 5, max_id, compile=True)
+#
+# train_crps_list, valid_crps_list, results_df = loop_over_days(
+#     DATA_DIR,
+#     emb_model,
+#     date_str_start, date_str_stop,
+#     window_size=window_size,
+#     fclt=fclt,
+#     epochs_max=steps_max,
+#     early_stopping_delta=early_stopping_delta,
+#     lr=0.1,
+#     verbose=0,
+#     model_type='embedding')
+# #%%
+#
+# print(np.mean(train_crps_list), np.mean(valid_crps_list))
+# [1.31448369234, 1.43893041276]
+# preds = emb_model.predict([test_set.features, test_set.cont_ids])
+# results_df = create_results_df(test_set.date_strs, test_set.station_ids,
+#                                preds[:, 0], preds[:, 1])
+# results_df.to_csv(results_dir + 'embedding_fc_train_2015_pred_2016.csv')
